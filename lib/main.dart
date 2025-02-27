@@ -1,15 +1,45 @@
 import 'dart:convert';
-
 import 'package:dmdfx/fx.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-
-import 'package:flutter_libserialport/flutter_libserialport.dart';
-
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'fxdevice.dart';
 
+// Providers
+final fxDeviceControllerProvider = Provider<FxDeviceController>((ref) {
+  final controller = FxDeviceController();
+  _initializeController(controller);
+
+  // Run cleanup when provider is disposed (hot restart or app close)
+  ref.onDispose(() {
+    print('FxDeviceController provider disposing... Running cleanup');
+    controller.dispose(); // Already handles device cleanup
+  });
+
+  return controller;
+});
+
+// Initialization function
+void _initializeController(FxDeviceController controller) async {
+  print('Initializing FxDeviceController...');
+  final discoveredPorts = await controller.discoverDevices();
+  print('Initial discovery found devices on ports: $discoveredPorts');
+  if (discoveredPorts.isNotEmpty) {
+    final device = controller.getDevice(discoveredPorts.first);
+    if (device != null) {
+      print(
+        'Initial device: ${device.displayName}, Type: ${device.fxDeviceType}',
+      );
+      device.onDataCallback = (data) => print('Initial Data: $data');
+    }
+  }
+}
+
+final discoveredDevicesProvider = FutureProvider<List<String>>((ref) => []);
+
+final selectedDeviceProvider = StateProvider<FxDevice?>((ref) => null);
+
 void main() {
-  runApp(DMDfxApp());
+  runApp(ProviderScope(child: DMDfxApp()));
 }
 
 class DMDfxApp extends StatelessWidget {
@@ -32,115 +62,33 @@ class DMDfxApp extends StatelessWidget {
   }
 }
 
-class HomePage extends StatefulWidget {
+class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
 
   @override
-  HomePageState createState() => HomePageState();
+  ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class HomePageState extends State<HomePage> {
-  final FxDeviceController fx = FxDeviceController();
-  // void _openPort(String devicePath) {
-  //   SerialPort port = SerialPort(devicePath);
-  //   port.openReadWrite();
-  //   SerialPortConfig config = port.config;
-  //   config.baudRate = 19200;
-  //   port.config = config;
-
-  //   SerialPortReader reader = SerialPortReader(port);
-
-  //   _openedPorts[devicePath] = reader;
-  // }
-
-  // void _closePort(String devicePath) {
-  //   SerialPortReader? reader = _openedPorts[devicePath];
-  //   if (reader == null) {
-  //     return;
-  //   }
-  //   reader.port.close();
-  //   _openedPorts.remove(devicePath);
-  // }
-
-  // Future<String> _getFxModelNumber(String devicePath) async {
-  //   SerialPortReader? reader = _openedPorts[devicePath];
-  //   if (reader == null) {
-  //     return Future.value("Error: Port not open");
-  //   }
-
-  //   reader.port.write(utf8.encode("GET\n"));
-  //   // buffer to accumulate data
-
-  //   // wait until we get a string beginning in modelno=
-  //   await for (var raw in reader.stream) {
-  //     String data = '';
-  //     try {
-  //       data = utf8.decode(raw);
-  //     } on FormatException {
-  //       continue;
-  //     }
-  //     buffer += data;
-
-  //     // check if buffer contains a complete line
-  //     if (buffer.contains('\n')) {
-  //       List<String> lines = buffer.split('\n');
-  //       for (var line in lines.getRange(0, lines.length - 1)) {
-  //         print(line);
-  //         if (line.startsWith('modelno=')) {
-  //           return line;
-  //         }
-  //       }
-  //       // keep the last incomplete line in the buffer
-  //       buffer = lines.last;
-  //     }
-  //   }
-  //   await Future.delayed(Duration(seconds: 10));
-  //   return "";
-  // }
-
-  void testing() async {
-    // Discover devices
-    print('Scanning for FX devices...');
-    final discoveredPorts = await fx.discoverDevices();
-    print('Found devices on ports: $discoveredPorts');
-
-    // Access a device
-    if (discoveredPorts.isNotEmpty) {
-      final device = fx.getDevice(discoveredPorts.first);
-      if (device != null) {
-        print('Device: ${device.displayName}, Type: ${device.fxDeviceType}');
-
-        // Listen to data
-        device.dataStream.listen(
-          (data) => print('Data: $data'),
-          onError: (e) => print('Error: $e'),
-        );
-
-        // Send a command
-        try {
-          final response = await device.sendCommand('STATUS');
-          print('Status: $response');
-        } catch (e) {
-          print('Command failed: $e');
-        }
-      }
-    }
-  }
-
+class _HomePageState extends ConsumerState<HomePage>
+    with WidgetsBindingObserver {
   @override
   void initState() {
     super.initState();
-    testing();
+    WidgetsBinding.instance.addObserver(this); // Register lifecycle observer
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // Unregister observer
     super.dispose();
-    fx.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final fxController = ref.watch(fxDeviceControllerProvider);
+    final devicesAsync = ref.watch(discoveredDevicesProvider);
+    final selectedDevice = ref.watch(selectedDeviceProvider);
+
     return Scaffold(
       appBar: AppBar(
         title: Text.rich(
@@ -159,77 +107,177 @@ class HomePageState extends State<HomePage> {
         children: [
           Flexible(
             flex: 1,
-            child: Material(
-              elevation: 2,
-              child: ListView(
-                children: [
-                  Card(
-                    child: SizedBox.fromSize(
-                      size: Size(double.infinity, 128),
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(10.0),
-                        onTap: () {
-                          print("Tapped");
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(24.0),
-                          child: Row(
-                            children: [
-                              FlutterLogo(size: 64),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      "DMDfx Panel 32x32",
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(fontSize: 18),
-                                    ),
-                                    Text(
-                                      "Fw Ver: 1.0.0",
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                    Text(
-                                      "Serial: 1234567890",
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                    Text(
-                                      "Port: COM3",
-                                      style: TextStyle(fontSize: 12),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
+            child: Column(
+              children: [
+                ElevatedButton.icon(
+                  onPressed:
+                      !FxDeviceController.discoveryRunning
+                          ? () => ref.refresh(discoveredDevicesProvider)
+                          : null,
+                  label: Text("Reload"),
+                  icon: Icon(Icons.refresh),
+                ),
+                Expanded(
+                  child: Material(
+                    elevation: 2,
+                    child: devicesAsync.when(
+                      data:
+                          (ports) => ListView.builder(
+                            itemCount: ports.length,
+                            itemBuilder: (context, index) {
+                              final device = fxController.getDevice(
+                                ports[index],
+                              );
+                              return FxDeviceCard(
+                                device: device,
+                                onTap: () {
+                                  ref
+                                      .read(selectedDeviceProvider.notifier)
+                                      .state = device;
+                                },
+                              );
+                            },
                           ),
-                        ),
-                      ),
+                      loading: () => Center(child: CircularProgressIndicator()),
+                      error: (err, stack) => Center(child: Text('Error: $err')),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           VerticalDivider(thickness: 1),
           Flexible(
             flex: 3,
-            // child: Center(child: Text("Select a connected DMDfx device")),
-            child: Card(
-              elevation: 3,
-              child: Column(
-                children: [
-                  AppBar(
-                    elevation: 4,
-                    title: Text("DMDfx Device Demo"),
-                    actionsPadding: EdgeInsets.all(8.0),
-                    centerTitle: true,
-                    actions: [
-                      IconButton(icon: Icon(Icons.close), onPressed: () {}),
+            child: Stack(
+              children: [
+                Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Connect to an Fx device to view info",
+                        style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                      ),
+                      Image.asset("assets/plug.png", height: 280),
                     ],
                   ),
-                  Expanded(child: Text("DMDfx")),
-                ],
+                ),
+                AnimatedSwitcher(
+                  duration: Duration(milliseconds: 300),
+                  transitionBuilder: (child, animation) {
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: Offset(1.0, 0.0),
+                        end: Offset.zero,
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeInOut,
+                        ),
+                      ),
+                      child: child,
+                    );
+                  },
+                  child:
+                      selectedDevice != null
+                          ? DeviceDemoPopup(
+                            key: ValueKey(selectedDevice),
+                            device: selectedDevice,
+                            onClose: () {
+                              ref.read(selectedDeviceProvider.notifier).state =
+                                  null;
+                            },
+                          )
+                          : SizedBox.shrink(),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class FxDeviceCard extends StatelessWidget {
+  final FxDevice? device;
+  final VoidCallback? onTap;
+
+  const FxDeviceCard({super.key, this.device, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: SizedBox.fromSize(
+        size: Size(double.infinity, 128),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(10.0),
+          onTap: () {
+            print("Tapped ${device?.displayName}");
+            onTap?.call();
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Row(
+              children: [
+                FlutterLogo(size: 64),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        device?.displayName ?? "Unknown Device",
+                        style: TextStyle(fontSize: 18),
+                      ),
+                      Text(
+                        "Type: ${device?.fxDeviceType ?? 'Unknown'}",
+                        style: TextStyle(fontSize: 12),
+                      ),
+                      Text(
+                        "Port: ${device?.port.name ?? 'N/A'}",
+                        style: TextStyle(fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class DeviceDemoPopup extends StatelessWidget {
+  final FxDevice device;
+  final VoidCallback onClose;
+
+  const DeviceDemoPopup({
+    super.key,
+    required this.device,
+    required this.onClose,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      elevation: 3,
+      child: Column(
+        children: [
+          AppBar(
+            elevation: 4,
+            title: Text("DMDfx Device Demo"),
+            centerTitle: true,
+            actions: [IconButton(icon: Icon(Icons.close), onPressed: onClose)],
+          ),
+          Expanded(
+            child: Center(
+              child: Text(
+                "Connected to ${device.displayName}",
+                style: TextStyle(fontSize: 18),
               ),
             ),
           ),

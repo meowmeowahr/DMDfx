@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
-
 import 'fxdevice.dart';
 
 class FxDeviceController {
@@ -9,6 +8,7 @@ class FxDeviceController {
   static const int _defaultBaudRate = 19200;
   static const Duration _defaultTimeout = Duration(seconds: 5);
   static const int _maxReadAttempts = 50;
+  static bool discoveryRunning = false;
 
   Map<String, FxDevice> get devices => Map.unmodifiable(_devices);
 
@@ -24,18 +24,32 @@ class FxDeviceController {
     FxDevice? device;
 
     try {
-      if (_openPorts.containsKey(portPath)) {
-        port = _openPorts[portPath]!;
-      } else {
-        port = SerialPort(portPath);
-        port.openReadWrite();
-        final config = port.config..baudRate = baudRate;
-        port.config = config;
-        _openPorts[portPath] = port;
+      // If device already exists, don't test it
+      if (_devices.containsKey(portPath)) {
+        return true;
       }
 
+      // If port is already open but no device exists, use existing port
+      if (_openPorts.containsKey(portPath)) {
+        port = _openPorts[portPath]!;
+        device = FxDevice(port: port, baudRate: baudRate);
+        _devices[portPath] = device;
+        return true;
+      }
+
+      // New port detection
+      port = SerialPort(portPath);
+      if (!port.openReadWrite()) {
+        print('Failed to open port $portPath');
+        return false;
+      }
+
+      final config = port.config..baudRate = baudRate;
+      port.config = config;
+      _openPorts[portPath] = port;
       device = FxDevice(port: port, baudRate: baudRate);
-      print('Testing port $portPath: Sending X command');
+
+      print('Testing new port $portPath: Sending X command');
       device.write('X\n');
 
       final startTime = DateTime.now();
@@ -50,10 +64,16 @@ class FxDeviceController {
           print('Response $attempts from $portPath: $response');
 
           if (response.contains('modelno=')) {
-            final modelNo = _extractModelNo(response);
+            final modelNo = _extractValue("modelno", response);
             if (modelNo.isNotEmpty) {
               device.fxDeviceType = modelNo;
-              device.displayName = 'FX Device ($modelNo @ $portPath)';
+              _devices[portPath] = device;
+              return true;
+            }
+          } else if (response.contains('name=')) {
+            final dispName = _extractValue("name", response);
+            if (dispName.isNotEmpty) {
+              device.displayName = dispName;
               _devices[portPath] = device;
               return true;
             }
@@ -67,18 +87,23 @@ class FxDeviceController {
         }
       }
 
-      print('No valid modelno found after $attempts attempts on $portPath');
-      await device.dispose();
-      return false;
+      // If we get here, treat as unknown FX device
+      device.displayName = 'FX Device (Unknown @ $portPath)';
+      _devices[portPath] = device;
+      return true;
     } catch (e) {
       print('Error testing port $portPath: $e');
       await device?.dispose();
+      if (_openPorts.containsKey(portPath)) {
+        _openPorts[portPath]!.close();
+        _openPorts.remove(portPath);
+      }
       return false;
     }
   }
 
-  String _extractModelNo(String response) {
-    final match = RegExp(r'modelno=([^\s]+)').firstMatch(response);
+  String _extractValue(String command, String response) {
+    final match = RegExp('$command=([^\\s]+)').firstMatch(response);
     return match?.group(1) ?? '';
   }
 
@@ -86,6 +111,9 @@ class FxDeviceController {
     int baudRate = _defaultBaudRate,
     Duration timeoutPerPort = _defaultTimeout,
   }) async {
+    if (discoveryRunning) return _devices.keys.toList();
+    discoveryRunning = true;
+
     final availablePorts = getAvailablePorts();
     final foundPorts = <String>[];
 
@@ -106,6 +134,7 @@ class FxDeviceController {
       }
     }
 
+    discoveryRunning = false;
     return foundPorts;
   }
 
@@ -123,12 +152,16 @@ class FxDeviceController {
     }
   }
 
-  Future<void> dispose() async {
+  Future<void> closeAllPorts() async {
     final devicePaths = List.from(_devices.keys);
     for (final portPath in devicePaths) {
       await removeDevice(portPath);
     }
     _devices.clear();
     _openPorts.clear();
+  }
+
+  Future<void> dispose() async {
+    await closeAllPorts();
   }
 }

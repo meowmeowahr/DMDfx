@@ -38,6 +38,14 @@ class FxDevice {
        _fxDeviceType = fxDeviceType {
     _onDataCallback = onDataCallback;
     _initializeSerialPort();
+
+    // Call the callback if provided
+    if (_onDataCallback != null) {
+      dataStream.listen((data) {
+        _onDataCallback!(data);
+      });
+    }
+
     _startListening();
   }
 
@@ -70,12 +78,6 @@ class FxDevice {
           final decoded = utf8.decode(data, allowMalformed: true);
           _buffer.write(decoded);
           _processBuffer();
-
-          // Call the callback if provided
-          if (_onDataCallback != null) {
-            _onDataCallback!(decoded);
-          }
-
           _updateUptime();
         } catch (e) {
           print('Error decoding data from ${_port.name}: $e');
@@ -164,7 +166,16 @@ class FxDevice {
   set uptime(Duration value) => _uptime = value;
   set freeMemory(int value) => _freeMemory = value;
   set currentFrame(int value) => _currentFrame = value;
-  set onDataCallback(Function(String)? callback) => _onDataCallback = callback;
+
+  set onDataCallback(Function(String)? callback) {
+    if (_onDataCallback != null) {
+      return;
+    }
+    _onDataCallback = callback;
+    dataStream.listen((data) {
+      _onDataCallback!(data);
+    });
+  }
 
   void write(String data) {
     if (!_port.isOpen) throw Exception('Port ${_port.name} is not open');
