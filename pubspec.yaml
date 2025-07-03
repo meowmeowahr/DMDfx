@@ -38,6 +38,8 @@ dependencies:
   shared_preferences: ^2.5.3
   uuid: ^4.5.1
   proper_filesize: ^1.0.2
+  file_picker: ^10.2.0
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:

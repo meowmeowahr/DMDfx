@@ -89,6 +89,7 @@ class FxDevice {
   final String modelNumber;
   final String cpu;
   final String version;
+  final String resolution;
   final FxDeviceConfig config = FxDeviceConfig(
     brightness: 0,
     pageTime: 0,
@@ -110,6 +111,7 @@ class FxDevice {
     required this.modelNumber,
     required this.cpu,
     required this.version,
+    required this.resolution,
     this.isConnected = false,
   });
 

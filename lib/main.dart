@@ -1,20 +1,15 @@
-import 'dart:convert';
-
 import 'package:dmdfx/avrdude_downloader.dart';
 import 'package:dmdfx/avrdude_installui.dart';
 import 'package:dmdfx/constants.dart';
 import 'package:dmdfx/device.dart';
 import 'package:dmdfx/device_query.dart';
 import 'package:dmdfx/util.dart';
+import 'package:dmdfx/video_editor.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
-import 'package:http/http.dart' as http;
 import 'package:proper_filesize/proper_filesize.dart';
 import 'dart:async';
-import 'dart:typed_data';
-
-import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(DMDfxApp());
@@ -26,7 +21,7 @@ class DMDfxApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'DMDfx',
+      title: 'DMDfx Manager',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: Colors.green,
@@ -114,19 +109,21 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                   }
                 },
               ),
-              Divider(),
               ListTile(
                 leading: Icon(Icons.info_outline),
                 title: Text('About'),
-                subtitle: Text('DMDfx v1.0.0'),
+                subtitle: Text('About DMDfx Manager'),
                 onTap: () {
                   showAboutDialog(
                     context: context,
-                    applicationName: 'DMDfx',
                     applicationVersion: '1.0.0',
-                    applicationIcon: Icon(Icons.usb),
+                    applicationIcon: Icon(
+                      Icons.usb,
+                      size: 64,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                     children: [
-                      Text('A tool for managing DMDfx serial devices.'),
+                      Text('A tool for managing DMDfx-powered LED displays.'),
                     ],
                   );
                 },
@@ -223,8 +220,12 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
             String? modelNumber = await portQuery(port, "X", "modelno");
             String? cpu = await portQuery(port, "I", "board_id");
             String? version = await portQuery(port, "V", "version");
+            String? resolution = await portQuery(port, "qR", "res");
 
-            if (modelNumber != null && cpu != null && version != null) {
+            if (modelNumber != null &&
+                cpu != null &&
+                version != null &&
+                resolution != null) {
               print('Found device on $portName with model: $modelNumber, $cpu');
               setState(() {
                 discoveredDevices.add(
@@ -234,6 +235,7 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                     modelNumber: modelNumber,
                     cpu: cpu,
                     version: version,
+                    resolution: resolution,
                   ),
                 );
               });
@@ -294,17 +296,7 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text.rich(
-          TextSpan(
-            text: 'DMD',
-            children: <TextSpan>[
-              TextSpan(
-                text: 'fx',
-                style: TextStyle(fontStyle: FontStyle.italic),
-              ),
-            ],
-          ),
-        ),
+        title: Text("DMDfx Manager"),
         actions: [
           IconButton(onPressed: _showSettings, icon: Icon(Icons.settings)),
         ],
@@ -314,7 +306,7 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
         children: [
           // Sidebar
           Container(
-            width: 300,
+            constraints: BoxConstraints(minWidth: 240, maxWidth: 280),
             decoration: BoxDecoration(
               color: Theme.of(context).colorScheme.surfaceContainerLow,
             ),
@@ -508,6 +500,7 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                                       controller: TextEditingController(
                                                         text:
                                                             'Model: ${selectedDevice!.modelNumber}\n'
+                                                            'Resolution: ${selectedDevice!.resolution}\n'
                                                             'Port: ${selectedDevice!.portName}\n'
                                                             'CPU: ${selectedDevice!.cpu}\n'
                                                             'Uptime: ${formatUptime(selectedDevice!.uptimeMs)}\n'
@@ -592,6 +585,21 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                           icon: Icon(Icons.sd_card),
                                         ),
                                       ],
+                                      onTap: (index) {
+                                        if (index == 0) {
+                                          setState(() {
+                                            reloadFuture = selectedDevice!
+                                                .config
+                                                .reload(selectedDevice!);
+                                          });
+                                        } else if (index == 2) {
+                                          setState(() {
+                                            reloadFuture = selectedDevice!
+                                                .memory
+                                                .reload(selectedDevice!);
+                                          });
+                                        }
+                                      },
                                     ),
                                     Expanded(
                                       child: TabBarView(
@@ -904,8 +912,8 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                             ),
                                           ),
                                           Center(
-                                            child: Text(
-                                              'Editor tab content here',
+                                            child: VideoEditor(
+                                              device: selectedDevice!,
                                             ),
                                           ),
                                           Center(

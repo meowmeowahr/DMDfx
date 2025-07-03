@@ -1,3 +1,7 @@
+import 'dart:typed_data';
+
+import 'package:image/image.dart' as img;
+
 String formatUptime(int milliseconds) {
   Duration duration = Duration(milliseconds: milliseconds);
 
@@ -23,4 +27,29 @@ String formatUptime(int milliseconds) {
   }
 
   return parts.join(' ');
+}
+
+// Helper function to apply 1-bit grayscale conversion
+Uint8List applyGrayscaleThreshold(Uint8List originalBytes, int threshold) {
+  final image = img.decodeImage(originalBytes);
+  if (image == null) return originalBytes;
+
+  final grayscaleImage = img.grayscale(image);
+  final outputImage = img.Image(
+    width: grayscaleImage.width,
+    height: grayscaleImage.height,
+  );
+
+  for (int y = 0; y < grayscaleImage.height; y++) {
+    for (int x = 0; x < grayscaleImage.width; x++) {
+      final pixel = grayscaleImage.getPixel(x, y);
+      final lum = img.getLuminanceRgb(pixel.r, pixel.g, pixel.b);
+      if (lum > threshold) {
+        outputImage.setPixelRgb(x, y, 255, 255, 255); // White
+      } else {
+        outputImage.setPixelRgb(x, y, 0, 0, 0); // Black
+      }
+    }
+  }
+  return Uint8List.fromList(img.encodePng(outputImage));
 }
