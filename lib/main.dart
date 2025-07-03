@@ -10,6 +10,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'package:http/http.dart' as http;
+import 'package:proper_filesize/proper_filesize.dart';
 import 'dart:async';
 import 'dart:typed_data';
 
@@ -468,17 +469,12 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      SizedBox(height: 6),
+                                      SizedBox(height: 4),
                                       Text(
                                         'Port: ${selectedDevice!.portName}',
                                         style: TextStyle(fontSize: 16),
                                       ),
-                                      SizedBox(height: 6),
-                                      Text(
-                                        'CPU: ${selectedDevice!.cpu}',
-                                        style: TextStyle(fontSize: 16),
-                                      ),
-                                      SizedBox(height: 6),
+                                      SizedBox(height: 4),
                                       Text(
                                         'Version: ${selectedDevice!.version}',
                                         style: TextStyle(fontSize: 16),
@@ -592,8 +588,8 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                           icon: Icon(Icons.edit),
                                         ),
                                         Tab(
-                                          text: 'Memory',
-                                          icon: Icon(Icons.memory),
+                                          text: 'Storage',
+                                          icon: Icon(Icons.sd_card),
                                         ),
                                       ],
                                     ),
@@ -826,6 +822,74 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                                                 ),
                                                               ],
                                                             ),
+                                                            Divider(),
+                                                            Row(
+                                                              children: [
+                                                                Text(
+                                                                  "Time Bar",
+                                                                ),
+                                                                Spacer(),
+                                                                SegmentedButton(
+                                                                  segments: [
+                                                                    ButtonSegment(
+                                                                      value: 2,
+                                                                      label: Text(
+                                                                        "Top",
+                                                                      ),
+                                                                      icon: Icon(
+                                                                        Icons
+                                                                            .align_vertical_top,
+                                                                      ),
+                                                                    ),
+                                                                    ButtonSegment(
+                                                                      value: 1,
+                                                                      label: Text(
+                                                                        "Bottom",
+                                                                      ),
+                                                                      icon: Icon(
+                                                                        Icons
+                                                                            .align_vertical_bottom,
+                                                                      ),
+                                                                    ),
+                                                                    ButtonSegment(
+                                                                      value: 0,
+                                                                      label: Text(
+                                                                        "Disabled",
+                                                                      ),
+                                                                      icon: Icon(
+                                                                        Icons
+                                                                            .block,
+                                                                      ),
+                                                                    ),
+                                                                  ],
+                                                                  selected: {
+                                                                    selectedDevice!
+                                                                        .config
+                                                                        .timeBarPos,
+                                                                  },
+                                                                  emptySelectionAllowed:
+                                                                      false,
+                                                                  multiSelectionEnabled:
+                                                                      false,
+                                                                  onSelectionChanged: (
+                                                                    Set<int>
+                                                                    selection,
+                                                                  ) {
+                                                                    print(
+                                                                      selection
+                                                                          .first,
+                                                                    );
+                                                                    setState(() {
+                                                                      selectedDevice!.config.setTimebarPos(
+                                                                        selectedDevice!,
+                                                                        selection
+                                                                            .first,
+                                                                      );
+                                                                    });
+                                                                  },
+                                                                ),
+                                                              ],
+                                                            ),
                                                           ],
                                                         ),
                                                       );
@@ -839,16 +903,145 @@ class DMDfxHomePageState extends State<DMDfxHomePage> {
                                               ],
                                             ),
                                           ),
-                                          // Editor Tab
                                           Center(
                                             child: Text(
                                               'Editor tab content here',
                                             ),
                                           ),
-                                          // Memory Tab
                                           Center(
-                                            child: Text(
-                                              'Memory tab content here',
+                                            child: Padding(
+                                              padding: const EdgeInsets.all(
+                                                16.0,
+                                              ),
+                                              child: Column(
+                                                children: [
+                                                  Row(
+                                                    children: [
+                                                      Text(
+                                                        'Storage Information',
+                                                        style: TextStyle(
+                                                          fontSize: 18,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                      Spacer(),
+                                                      OutlinedButton.icon(
+                                                        onPressed: () {
+                                                          setState(() {
+                                                            // Reset and assign new Future in one setState
+                                                            reloadFuture =
+                                                                selectedDevice!
+                                                                    .memory
+                                                                    .reload(
+                                                                      selectedDevice!,
+                                                                    );
+                                                          });
+                                                        },
+                                                        icon: Icon(
+                                                          Icons.refresh,
+                                                        ),
+                                                        label: Text('Reload'),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  SizedBox(height: 24),
+                                                  FutureBuilder(
+                                                    future: reloadFuture,
+                                                    builder: (
+                                                      BuildContext context,
+                                                      AsyncSnapshot snapshot,
+                                                    ) {
+                                                      if (snapshot
+                                                              .connectionState ==
+                                                          ConnectionState
+                                                              .waiting) {
+                                                        return Expanded(
+                                                          child: Center(
+                                                            child:
+                                                                CircularProgressIndicator(),
+                                                          ),
+                                                        );
+                                                      } else if (snapshot
+                                                          .hasError) {
+                                                        return Text(
+                                                          'Error: ${snapshot.error}',
+                                                        );
+                                                      } else if (snapshot
+                                                          .hasData) {
+                                                        return Expanded(
+                                                          child: ListView(
+                                                            children: [
+                                                              Card(
+                                                                color:
+                                                                    Theme.of(
+                                                                          context,
+                                                                        )
+                                                                        .colorScheme
+                                                                        .surfaceContainerHigh,
+                                                                child: Padding(
+                                                                  padding:
+                                                                      const EdgeInsets.all(
+                                                                        16.0,
+                                                                      ),
+                                                                  child: Row(
+                                                                    children: [
+                                                                      Icon(
+                                                                        Icons
+                                                                            .sd_storage,
+                                                                        size:
+                                                                            64,
+                                                                        color:
+                                                                            Theme.of(
+                                                                              context,
+                                                                            ).colorScheme.primary,
+                                                                      ),
+                                                                      SizedBox(
+                                                                        width:
+                                                                            12,
+                                                                      ),
+                                                                      Column(
+                                                                        crossAxisAlignment:
+                                                                            CrossAxisAlignment.start,
+                                                                        children: [
+                                                                          Text(
+                                                                            "SD Card",
+                                                                            style: TextStyle(
+                                                                              fontSize:
+                                                                                  18,
+                                                                              fontWeight:
+                                                                                  FontWeight.bold,
+                                                                              color:
+                                                                                  Theme.of(
+                                                                                    context,
+                                                                                  ).colorScheme.primary,
+                                                                            ),
+                                                                          ),
+                                                                          SizedBox(
+                                                                            height:
+                                                                                8,
+                                                                          ),
+                                                                          Text(
+                                                                            "${FileSize.fromBytes(selectedDevice!.memory.sdFree).toString(decimals: 2)} Free of ${FileSize.fromBytes(selectedDevice!.memory.sdTotal).toString(decimals: 2)}",
+                                                                          ),
+                                                                        ],
+                                                                      ),
+                                                                    ],
+                                                                  ),
+                                                                ),
+                                                              ),
+                                                            ],
+                                                          ),
+                                                        );
+                                                      } else {
+                                                        return Text(
+                                                          'No data available',
+                                                        );
+                                                      }
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ),
                                         ],

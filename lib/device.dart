@@ -9,8 +9,13 @@ import 'package:flutter_libserialport/flutter_libserialport.dart';
 class FxDeviceConfig {
   int brightness;
   int pageTime;
+  int timeBarPos;
 
-  FxDeviceConfig({required this.brightness, required this.pageTime});
+  FxDeviceConfig({
+    required this.brightness,
+    required this.pageTime,
+    required this.timeBarPos,
+  });
 
   Future<bool> reload(FxDevice device) async {
     final queryBrightness = await fxQuery(device, "qB", "brightness");
@@ -26,6 +31,14 @@ class FxDeviceConfig {
       return false;
     }
     pageTime = int.tryParse(queryPageTime) ?? pageTime;
+
+    final queryTimeBarPos = await fxQuery(device, "qT", "timebarpos");
+    if (queryTimeBarPos == null) {
+      print("Error during timeBarPos fxQuery");
+      return false;
+    }
+    timeBarPos = int.tryParse(queryTimeBarPos) ?? timeBarPos;
+
     return true;
   }
 
@@ -38,6 +51,36 @@ class FxDeviceConfig {
     pageTime = value;
     device.port.write(Uint8List.fromList("pagetime=$pageTime".codeUnits));
   }
+
+  Future<void> setTimebarPos(FxDevice device, int value) async {
+    timeBarPos = value;
+    device.port.write(Uint8List.fromList("timebarpos=$timeBarPos".codeUnits));
+  }
+}
+
+class FxDeviceMemory {
+  int sdFree;
+  int sdTotal;
+
+  FxDeviceMemory({required this.sdFree, required this.sdTotal});
+
+  Future<bool> reload(FxDevice device) async {
+    final querySdFree = await fxQuery(device, "qSdFree", "sdfree");
+    if (querySdFree == null) {
+      print("Error during sdFree fxQuery");
+      return false;
+    }
+    sdFree = int.tryParse(querySdFree) ?? sdFree;
+
+    final querySdTotal = await fxQuery(device, "qSdTotal", "sdtotal");
+    if (querySdTotal == null) {
+      print("Error during sdTotal fxQuery");
+      return false;
+    }
+    sdTotal = int.tryParse(querySdTotal) ?? sdTotal;
+
+    return true;
+  }
 }
 
 class FxDevice {
@@ -46,7 +89,12 @@ class FxDevice {
   final String modelNumber;
   final String cpu;
   final String version;
-  final FxDeviceConfig config = FxDeviceConfig(brightness: 0, pageTime: 0);
+  final FxDeviceConfig config = FxDeviceConfig(
+    brightness: 0,
+    pageTime: 0,
+    timeBarPos: 0,
+  );
+  final FxDeviceMemory memory = FxDeviceMemory(sdFree: 0, sdTotal: 0);
   final bool isConnected;
 
   final Map<String, void Function(String key, String value)> _callbacks = {};
