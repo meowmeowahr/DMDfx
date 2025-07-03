@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:dmdfx/constants.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
@@ -114,7 +115,7 @@ Future<String> downloadAndExtractAvrdude() async {
   final dir = await getApplicationSupportDirectory();
   final tempDir = await getTemporaryDirectory();
   final filePath = "${tempDir.path}/avrdude_download";
-  final avrdudePath = "${dir.path}/avrdude/8.0";
+  final avrdudePath = "${dir.path}/avrdude/$avrdudeVersion";
   Directory(avrdudePath).createSync(recursive: true);
 
   // Skip download if already exists
@@ -123,7 +124,7 @@ Future<String> downloadAndExtractAvrdude() async {
   }
 
   // Download avrdude
-  final url = getAvrdudeDownloadUrl("8.0");
+  final url = getAvrdudeDownloadUrl(avrdudeVersion);
   final response = await http.get(Uri.parse(await url));
   final file = File(filePath);
   await file.writeAsBytes(response.bodyBytes);
@@ -163,4 +164,43 @@ Future<String> getAvrdudePath(String version) async {
     return "";
   }
   return path;
+}
+
+Future<bool> getAvrdudeExists(String version) async {
+  final dir = await getApplicationSupportDirectory();
+  late String path;
+  try {
+    if (Platform.isLinux || Platform.isMacOS) {
+      final avrdudeDir = Directory("${dir.path}/avrdude/$version/");
+      if (!await avrdudeDir.exists()) {
+        return false;
+      }
+      final entries = await avrdudeDir.list().toList();
+      if (entries.isEmpty) return false;
+      path = "${entries.first.absolute.path}/bin/avrdude";
+    } else if (Platform.isWindows) {
+      path = "${dir.path}/$version/avrdude.exe";
+    } else {
+      return false;
+    }
+    print(path);
+    return await File(path).exists();
+  } on StateError {
+    return false;
+  }
+}
+
+Future<void> removeAvrdude(String version) async {
+  final dir = await getApplicationSupportDirectory();
+  Directory targetDir;
+  if (Platform.isLinux || Platform.isMacOS) {
+    targetDir = Directory("${dir.path}/avrdude/$version/");
+  } else if (Platform.isWindows) {
+    targetDir = Directory("${dir.path}/$version/");
+  } else {
+    return;
+  }
+  if (await targetDir.exists()) {
+    await targetDir.delete(recursive: true);
+  }
 }
